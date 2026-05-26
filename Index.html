@@ -1,0 +1,146 @@
+/**
+ * Soeib Scan LJK Modern - Google Apps Script Backend
+ * Hak Cipta: Dibuat Oleh Soeb@2026
+ * * File: Code.gs
+ * Fungsi: Menyajikan halaman web, melakukan integrasi dengan Google Sheets, 
+ * serta menyimpan konfigurasi template LJK.
+ */
+
+// Konfigurasi ID Aplikasi
+const APP_ID = "soeib-scan-ljk-2026";
+
+/**
+ * Fungsi utama untuk menyajikan Web Application
+ */
+function doGet(e) {
+  var template = HtmlService.createTemplateFromFile('Index');
+  return template.evaluate()
+    .setTitle('Soeib Scan LJK Modern v2026')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+/**
+ * Menyertakan file HTML lain ke dalam file utama (jika diperlukan pemisahan lanjutan)
+ */
+function include(filename) {
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}
+
+/**
+ * Menyimpan data hasil scan LJK ke Google Spreadsheet aktif atau baru
+ * @param {Array} scanData - Array dari objek hasil scan
+ * @return {Object} Status keberhasilan dan URL Spreadsheet
+ */
+function exportToGoogleSheet(scanData) {
+  try {
+    // Membuat atau membuka Spreadsheet aktif
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss) {
+      ss = SpreadsheetApp.create("Soeib_LJK_Scan_Results_" + new Date().toISOString().split('T')[0]);
+    }
+    
+    var sheetName = "Hasil Scan LJK";
+    var sheet = ss.getSheetByName(sheetName);
+    
+    if (!sheet) {
+      sheet = ss.insertSheet(sheetName);
+      // Buat Header
+      sheet.appendRow([
+        "ID Scan", 
+        "Waktu Scan", 
+        "Nama/No Peserta", 
+        "Template", 
+        "Jumlah Soal", 
+        "Benar", 
+        "Salah", 
+        "Kosong", 
+        "Akurasi (%)", 
+        "Detail Jawaban"
+      ]);
+      sheet.getRange(1, 1, 1, 10).setFontWeight("bold").setBackground("#4F46E5").setFontColor("#FFFFFF");
+    }
+    
+    // Tulis baris data baru
+    scanData.forEach(function(row) {
+      sheet.appendRow([
+        row.id,
+        row.waktu,
+        row.peserta,
+        row.templateName,
+        row.totalSoal,
+        row.benar || 0,
+        row.salah || 0,
+        row.kosong || 0,
+        row.akurasi || "100%",
+        JSON.stringify(row.jawabanDeteksi)
+      ]);
+    });
+    
+    return {
+      success: true,
+      message: "Data berhasil diekspor ke Google Sheets!",
+      url: ss.getUrl()
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: "Gagal ekspor: " + error.toString()
+    };
+  }
+}
+
+/**
+ * Menyimpan konfigurasi template LJK buatan user ke ScriptProperties
+ * @param {String} templateName - Nama template unik
+ * @param {Object} config - Objek konfigurasi template
+ */
+function saveTemplateToProperties(templateName, config) {
+  try {
+    var userProperties = PropertiesService.getUserProperties();
+    var templatesJson = userProperties.getProperty(APP_ID + "_templates");
+    var templates = templatesJson ? JSON.parse(templatesJson) : {};
+    
+    templates[templateName] = config;
+    userProperties.setProperty(APP_ID + "_templates", JSON.stringify(templates));
+    
+    return { success: true, message: "Template '" + templateName + "' berhasil disimpan di cloud!" };
+  } catch (e) {
+    return { success: false, message: "Gagal menyimpan template: " + e.toString() };
+  }
+}
+
+/**
+ * Mengambil seluruh template LJK yang tersimpan
+ */
+function getTemplatesFromProperties() {
+  try {
+    var userProperties = PropertiesService.getUserProperties();
+    var templatesJson = userProperties.getProperty(APP_ID + "_templates");
+    if (templatesJson) {
+      return JSON.parse(templatesJson);
+    }
+    return {}; // Mengembalikan objek kosong jika belum ada template
+  } catch (e) {
+    return {};
+  }
+}
+
+/**
+ * Menghapus template LJK tertentu
+ */
+function deleteTemplateFromProperties(templateName) {
+  try {
+    var userProperties = PropertiesService.getUserProperties();
+    var templatesJson = userProperties.getProperty(APP_ID + "_templates");
+    if (templatesJson) {
+      var templates = JSON.parse(templatesJson);
+      delete templates[templateName];
+      userProperties.setProperty(APP_ID + "_templates", JSON.stringify(templates));
+      return { success: true, message: "Template berhasil dihapus." };
+    }
+    return { success: false, message: "Template tidak ditemukan." };
+  } catch (e) {
+    return { success: false, message: e.toString() };
+  }
+}
